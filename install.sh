@@ -28,7 +28,7 @@ Lena_menu() {
     echo "|| |___|  __/ | | | (_| |									|"
     echo "|\_____/\___|_| |_|\__,_|	V1.0.3 Beta			            |" 
     echo "+-------------------------------------------------------------------------+"    
-    echo -e "| Telegram Channel : ${MAGENTA}@AminiDev ${NC}| Version : ${GREEN} 1.0.3 Beta ${NC} "
+    echo -e "| Telegram Channel : ${MAGENTA}@AminiDev ${NC}| Version : ${GREEN} 1.0.3_2 Beta ${NC} "
     echo "+-------------------------------------------------------------------------+"      
     echo -e "|${GREEN}Server Country    |${NC} $SERVER_COUNTRY"
     echo -e "|${GREEN}Server IP         |${NC} $SERVER_IP"
@@ -39,7 +39,6 @@ Lena_menu() {
     echo -e "1- Install new tunnel"
     echo -e "2- Uninstall tunnel(s)"
     echo -e "3- Install BBR"
-    echo -e "4- Add new VXLAN tunnel"
     echo "+-------------------------------------------------------------------------+"
     echo -e "\033[0m"
 }
@@ -49,9 +48,9 @@ uninstall_all_vxlan() {
     for i in $(ip -d link show | grep -o 'vxlan[0-9]\+'); do
         ip link del $i 2>/dev/null
     done
-    rm -f /usr/local/bin/vxlan_bridge.sh /etc/ping_vxlan.sh
-    systemctl disable --now vxlan-tunnel.service 2>/dev/null
-    rm -f /etc/systemd/system/vxlan-tunnel.service
+    rm -f /usr/local/bin/vxlan_bridge2.sh /etc/ping_vxlan2.sh
+    systemctl disable --now vxlan-tunnel2.service 2>/dev/null
+    rm -f /etc/systemd/system/vxlan-tunnel2.service
     systemctl daemon-reload
     # Stop and disable HAProxy service
     systemctl stop haproxy 2>/dev/null
@@ -125,94 +124,6 @@ EOL
     fi
 }
 
-create_new_vxlan_tunnel() {
-    read -p "Enter VXLAN ID (e.g. 89): " VNI
-    VXLAN_IF="vxlan${VNI}"
-
-    read -p "Enter Local IP (this server): " LOCAL_IP
-    read -p "Enter Remote IP (other server): " REMOTE_IP
-
-    while true; do
-        read -p "Tunnel port (1 ~ 64435): " DSTPORT
-        if [[ $DSTPORT =~ ^[0-9]+$ ]] && (( DSTPORT >= 1 && DSTPORT <= 64435 )); then
-            break
-        else
-            echo "Invalid port. Try again."
-        fi
-    done
-
-    read -p "IP to assign to this VXLAN interface (e.g. 30.0.0.3/24): " VXLAN_IP
-
-    INTERFACE=$(ip route get 1.1.1.1 | awk '{print $5}' | head -n1)
-
-    echo "[+] Creating VXLAN interface $VXLAN_IF..."
-    ip link add $VXLAN_IF type vxlan id $VNI local $LOCAL_IP remote $REMOTE_IP dev $INTERFACE dstport $DSTPORT nolearning
-    ip addr add $VXLAN_IP dev $VXLAN_IF
-    ip link set $VXLAN_IF up
-
-    echo "[+] Adding iptables rules"
-    iptables -I INPUT 1 -p udp --dport $DSTPORT -j ACCEPT
-    iptables -I INPUT 1 -s $REMOTE_IP -j ACCEPT
-    iptables -I INPUT 1 -s ${VXLAN_IP%/*} -j ACCEPT
-
-    # Create a custom script
-    SCRIPT_FILE="/usr/local/bin/vxlan_${VNI}.sh"
-    SERVICE_FILE="/etc/systemd/system/vxlan_${VNI}.service"
-
-    cat <<EOF > "$SCRIPT_FILE"
-#!/bin/bash
-ip link add $VXLAN_IF type vxlan id $VNI local $LOCAL_IP remote $REMOTE_IP dev $INTERFACE dstport $DSTPORT nolearning
-ip addr add $VXLAN_IP dev $VXLAN_IF
-ip link set $VXLAN_IF up
-EOF
-
-    chmod +x "$SCRIPT_FILE"
-
-    cat <<EOF > "$SERVICE_FILE"
-[Unit]
-Description=VXLAN Tunnel ID $VNI
-After=network.target
-
-[Service]
-ExecStart=$SCRIPT_FILE
-Type=oneshot
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    chmod 644 "$SERVICE_FILE"
-    systemctl daemon-reload
-    systemctl enable "vxlan_${VNI}.service"
-    systemctl start "vxlan_${VNI}.service"
-
-    echo -e "\n${GREEN}[✓] VXLAN tunnel ID $VNI setup completed.${NC}"
-
-    read -p "Do you want to add port $DSTPORT to HAProxy? [y/n]: " add_haproxy
-    if [[ "$add_haproxy" == "y" ]]; then
-        CONFIG_FILE="/etc/haproxy/haproxy.cfg"
-        local_ip=$(hostname -I | awk '{print $1}')
-
-        # Check if already added
-        if ! grep -q "frontend frontend_$DSTPORT" "$CONFIG_FILE"; then
-            cat <<EOL >> "$CONFIG_FILE"
-
-frontend frontend_$DSTPORT
-    bind *:$DSTPORT
-    default_backend backend_$DSTPORT
-
-backend backend_$DSTPORT
-    server server1 $local_ip:$DSTPORT check
-EOL
-            echo "[*] Restarting HAProxy..."
-            systemctl restart haproxy
-        else
-            echo "Port $DSTPORT already exists in HAProxy config."
-        fi
-    fi
-}
-
 # ---------------- MAIN ----------------
 while true; do
     Lena_menu
@@ -229,10 +140,6 @@ while true; do
             install_bbr
             read -p "Press Enter to return to menu..."
             ;;
-        4)
-            create_new_vxlan_tunnel
-            read -p "Press Enter to return to menu..."
-            ;;
         *)
             echo "[x] Invalid option. Try again."
             sleep 1
@@ -247,7 +154,7 @@ if ! command -v ip >/dev/null 2>&1; then
 fi
 
 # ------------- VARIABLES --------------
-VNI=88
+VNI=89
 VXLAN_IF="vxlan${VNI}"
 
 # --------- Choose Server Role ----------
@@ -279,11 +186,11 @@ if [[ "$role_choice" == "1" ]]; then
         echo "IRAN Server setup complete."
         echo -e "####################################"
         echo -e "# Your IPv4 :                      #"
-        echo -e "#  30.0.0.1                     #"
+        echo -e "#  30.0.0.3                     #"
         echo -e "####################################"
     fi
 
-    VXLAN_IP="30.0.0.1/24"
+    VXLAN_IP="30.0.0.3/24"
     REMOTE_IP=$KHAREJ_IP
 
 elif [[ "$role_choice" == "2" ]]; then
@@ -304,10 +211,10 @@ elif [[ "$role_choice" == "2" ]]; then
     echo "Kharej Server setup complete."
     echo -e "####################################"
     echo -e "# Your IPv4 :                      #"
-    echo -e "#  30.0.0.2                        #"
+    echo -e "#  30.0.0.4                        #"
     echo -e "####################################"
 
-    VXLAN_IP="30.0.0.2/24"
+    VXLAN_IP="30.0.0.4/24"
     REMOTE_IP=$IRAN_IP
 
 else
@@ -335,22 +242,22 @@ iptables -I INPUT 1 -s ${VXLAN_IP%/*} -j ACCEPT
 # ---------------- CREATE SYSTEMD SERVICE ----------------
 echo "[+] Creating systemd service for VXLAN..."
 
-cat <<EOF > /usr/local/bin/vxlan_bridge.sh
+cat <<EOF > /usr/local/bin/vxlan_bridge2.sh
 #!/bin/bash
 ip link add $VXLAN_IF type vxlan id $VNI local $(hostname -I | awk '{print $1}') remote $REMOTE_IP dev $INTERFACE dstport $DSTPORT nolearning
 ip addr add $VXLAN_IP dev $VXLAN_IF
 ip link set $VXLAN_IF up
 EOF
 
-chmod +x /usr/local/bin/vxlan_bridge.sh
+chmod +x /usr/local/bin/vxlan_bridge2.sh
 
-cat <<EOF > /etc/systemd/system/vxlan-tunnel.service
+cat <<EOF > /etc/systemd/system/vxlan-tunnel2.service
 [Unit]
 Description=VXLAN Tunnel Interface
 After=network.target
 
 [Service]
-ExecStart=/usr/local/bin/vxlan_bridge.sh
+ExecStart=/usr/local/bin/vxlan_bridge2.sh
 Type=oneshot
 RemainAfterExit=yes
 
@@ -358,11 +265,11 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
-chmod 644 /etc/systemd/system/vxlan-tunnel.service
+chmod 644 /etc/systemd/system/vxlan-tunnel2.service
 systemctl daemon-reexec
 systemctl daemon-reload
-systemctl enable vxlan-tunnel.service
-systemctl start vxlan-tunnel.service
+systemctl enable vxlan-tunnel2.service
+systemctl start vxlan-tunnel2.service
 
 echo -e "\n${GREEN}[✓] VXLAN tunnel service enabled to run on boot.${NC}"
 
