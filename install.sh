@@ -71,6 +71,7 @@ Lena_menu() {
     echo -e "1- Install new tunnel"
     echo -e "2- Uninstall tunnel(s)"
     echo -e "3- Install BBR"
+    echo -e "4- Add new VXLAN tunnel"
     echo "+-------------------------------------------------------------------------+"
     echo -e "\033[0m"
 }
@@ -156,6 +157,94 @@ EOL
     fi
 }
 
+create_new_vxlan_tunnel() {
+    read -p "Enter VXLAN ID (e.g. 89): " VNI
+    VXLAN_IF="vxlan${VNI}"
+
+    read -p "Enter Local IP (this server): " LOCAL_IP
+    read -p "Enter Remote IP (other server): " REMOTE_IP
+
+    while true; do
+        read -p "Tunnel port (1 ~ 64435): " DSTPORT
+        if [[ $DSTPORT =~ ^[0-9]+$ ]] && (( DSTPORT >= 1 && DSTPORT <= 64435 )); then
+            break
+        else
+            echo "Invalid port. Try again."
+        fi
+    done
+
+    read -p "IP to assign to this VXLAN interface (e.g. 30.0.0.3/24): " VXLAN_IP
+
+    INTERFACE=$(ip route get 1.1.1.1 | awk '{print $5}' | head -n1)
+
+    echo "[+] Creating VXLAN interface $VXLAN_IF..."
+    ip link add $VXLAN_IF type vxlan id $VNI local $LOCAL_IP remote $REMOTE_IP dev $INTERFACE dstport $DSTPORT nolearning
+    ip addr add $VXLAN_IP dev $VXLAN_IF
+    ip link set $VXLAN_IF up
+
+    echo "[+] Adding iptables rules"
+    iptables -I INPUT 1 -p udp --dport $DSTPORT -j ACCEPT
+    iptables -I INPUT 1 -s $REMOTE_IP -j ACCEPT
+    iptables -I INPUT 1 -s ${VXLAN_IP%/*} -j ACCEPT
+
+    # Create a custom script
+    SCRIPT_FILE="/usr/local/bin/vxlan_${VNI}.sh"
+    SERVICE_FILE="/etc/systemd/system/vxlan_${VNI}.service"
+
+    cat <<EOF > "$SCRIPT_FILE"
+#!/bin/bash
+ip link add $VXLAN_IF type vxlan id $VNI local $LOCAL_IP remote $REMOTE_IP dev $INTERFACE dstport $DSTPORT nolearning
+ip addr add $VXLAN_IP dev $VXLAN_IF
+ip link set $VXLAN_IF up
+EOF
+
+    chmod +x "$SCRIPT_FILE"
+
+    cat <<EOF > "$SERVICE_FILE"
+[Unit]
+Description=VXLAN Tunnel ID $VNI
+After=network.target
+
+[Service]
+ExecStart=$SCRIPT_FILE
+Type=oneshot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    chmod 644 "$SERVICE_FILE"
+    systemctl daemon-reload
+    systemctl enable "vxlan_${VNI}.service"
+    systemctl start "vxlan_${VNI}.service"
+
+    echo -e "\n${GREEN}[✓] VXLAN tunnel ID $VNI setup completed.${NC}"
+
+    read -p "Do you want to add port $DSTPORT to HAProxy? [y/n]: " add_haproxy
+    if [[ "$add_haproxy" == "y" ]]; then
+        CONFIG_FILE="/etc/haproxy/haproxy.cfg"
+        local_ip=$(hostname -I | awk '{print $1}')
+
+        # Check if already added
+        if ! grep -q "frontend frontend_$DSTPORT" "$CONFIG_FILE"; then
+            cat <<EOL >> "$CONFIG_FILE"
+
+frontend frontend_$DSTPORT
+    bind *:$DSTPORT
+    default_backend backend_$DSTPORT
+
+backend backend_$DSTPORT
+    server server1 $local_ip:$DSTPORT check
+EOL
+            echo "[*] Restarting HAProxy..."
+            systemctl restart haproxy
+        else
+            echo "Port $DSTPORT already exists in HAProxy config."
+        fi
+    fi
+}
+
 # ---------------- MAIN ----------------
 while true; do
     Lena_menu
@@ -170,6 +259,10 @@ while true; do
             ;;
         3)
             install_bbr
+            read -p "Press Enter to return to menu..."
+            ;;
+        4)
+            create_new_vxlan_tunnel
             read -p "Press Enter to return to menu..."
             ;;
         *)
