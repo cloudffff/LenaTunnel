@@ -1,11 +1,39 @@
 #!/bin/bash
 
 # ---------------- INSTALL DEPENDENCIES ----------------
-echo "[*] Installing prerequisites (iproute2, net-tools, grep, awk, jq, curl)..."
-sudo apt update -y >/dev/null 2>&1
-sudo apt install -y iproute2 net-tools grep awk sudo iputils-ping jq curl haproxy >/dev/null 2>&1
-sudo apt-get install -y jq
+echo "[*] Updating package list..."
+sudo apt update -y
+
+echo "[*] Installing iproute2..."
+sudo apt install -y iproute2
+
+echo "[*] Installing net-tools..."
+sudo apt install -y net-tools
+
+echo "[*] Installing grep..."
+sudo apt install -y grep
+
+echo "[*] Installing awk..."
+sudo apt install -y awk
+
+echo "[*] Installing sudo..."
+sudo apt install -y sudo
+
+echo "[*] Installing iputils-ping..."
+sudo apt install -y iputils-ping
+
+echo "[*] Installing jq..."
+sudo apt install -y jq
+
+echo "[*] Installing Curl..."
+sudo apt install -y curl
+
+echo "[*] Installing Haproxy..."
 sudo apt install -y haproxy
+
+echo "[*] Installing Iptables..."
+sudo apt install iptables
+
 # ---------------- COLORS ----------------
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -24,26 +52,26 @@ Lena_menu() {
     SERVER_COUNTRY=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.country')
     SERVER_ISP=$(curl -sS "http://ip-api.com/json/$SERVER_IP" | jq -r '.isp')
 
-    echo "+-----------------------------------------------------------------------------+"
-    echo "| _                      										|"
-    echo "|| |                     										|"
-    echo "|| |     ___ _ __   __ _ 										|"
-    echo "|| |    / _ \ '_ \ / _  |										|"
-    echo "|| |___|  __/ | | | (_| |										|"
-    echo "|\_____/\___|_| |_|\__,_|	V1.0.2 Beta				            |" 
-    echo "+-----------------------------------------------------------------------------+"    
-    echo -e "| Telegram Channel : ${MAGENTA}@AminiDev ${NC}| Version : ${GREEN} 1.0.2 Beta ${NC} "
-    echo "+-----------------------------------------------------------------------------+"      
+    echo "+-------------------------------------------------------------------------+"
+    echo "| _                      									|"
+    echo "|| |                     									|"
+    echo "|| |     ___ _ __   __ _ 									|"
+    echo "|| |    / _ \ '_ \ / _  |									|"
+    echo "|| |___|  __/ | | | (_| |									|"
+    echo "|\_____/\___|_| |_|\__,_|	V1.0.3 Beta			            |" 
+    echo "+-------------------------------------------------------------------------+"    
+    echo -e "| Telegram Channel : ${MAGENTA}@AminiDev ${NC}| Version : ${GREEN} 1.0.3 Beta ${NC} "
+    echo "+-------------------------------------------------------------------------+"      
     echo -e "|${GREEN}Server Country    |${NC} $SERVER_COUNTRY"
     echo -e "|${GREEN}Server IP         |${NC} $SERVER_IP"
     echo -e "|${GREEN}Server ISP        |${NC} $SERVER_ISP"
-    echo "+-----------------------------------------------------------------------------+"
+    echo "+-------------------------------------------------------------------------+"
     echo -e "|${YELLOW}Please choose an option:${NC}"
-    echo "+-----------------------------------------------------------------------------+"
+    echo "+-------------------------------------------------------------------------+"
     echo -e "1- Install new tunnel"
     echo -e "2- Uninstall tunnel(s)"
     echo -e "3- Install BBR"
-    echo "+-----------------------------------------------------------------------------+"
+    echo "+-------------------------------------------------------------------------+"
     echo -e "\033[0m"
 }
 
@@ -56,6 +84,13 @@ uninstall_all_vxlan() {
     systemctl disable --now vxlan-tunnel.service 2>/dev/null
     rm -f /etc/systemd/system/vxlan-tunnel.service
     systemctl daemon-reload
+    # Stop and disable HAProxy service
+    systemctl stop haproxy 2>/dev/null
+    systemctl disable haproxy 2>/dev/null
+    # Remove HAProxy package
+    apt remove -y haproxy 2>/dev/null
+    apt purge -y haproxy 2>/dev/null
+    apt autoremove -y 2>/dev/null
     echo "[+] All VXLAN tunnels deleted."
 }
 
