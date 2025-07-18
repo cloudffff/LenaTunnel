@@ -1,38 +1,6 @@
 #!/bin/bash
 
 # ---------------- INSTALL DEPENDENCIES ----------------
-echo "[*] Updating package list..."
-sudo apt update -y
-
-echo "[*] Installing iproute2..."
-sudo apt install -y iproute2
-
-echo "[*] Installing net-tools..."
-sudo apt install -y net-tools
-
-echo "[*] Installing grep..."
-sudo apt install -y grep
-
-echo "[*] Installing awk..."
-sudo apt install -y awk
-
-echo "[*] Installing sudo..."
-sudo apt install -y sudo
-
-echo "[*] Installing iputils-ping..."
-sudo apt install -y iputils-ping
-
-echo "[*] Installing jq..."
-sudo apt install -y jq
-
-echo "[*] Installing Curl..."
-sudo apt install -y curl
-
-echo "[*] Installing Haproxy..."
-sudo apt install -y haproxy
-
-echo "[*] Installing Iptables..."
-sudo apt install iptables
 
 # ---------------- COLORS ----------------
 GREEN='\033[0;32m'
